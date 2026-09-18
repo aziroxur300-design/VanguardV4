@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#09111d">
+<title>VANGUARD — Les Héritiers du Rempart</title>
+<style>
+:root{--bg:#080d15;--p:#101a29;--p2:#17253a;--line:#2b3b54;--txt:#edf4ff;--muted:#9daec4;--a:#79d5ff;--good:#8be28b;--bad:#ff9b9b;--gold:#ffd65a}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#1a3048,#080d15 55%);color:var(--txt);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,select{font:inherit}button{border:1px solid var(--line);background:var(--p2);color:var(--txt);border-radius:12px;padding:11px 13px;cursor:pointer}button:hover{border-color:var(--a)}button.primary{background:#164261;border-color:#4bb9e8}
+.wrap{max-width:1050px;margin:auto;padding:12px}.top{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.brand{font-size:25px;font-weight:950;letter-spacing:3px}.sub{font-size:12px;color:var(--muted)}
+.card{background:linear-gradient(180deg,#111c2b,#0d1521);border:1px solid var(--line);border-radius:18px;padding:17px;margin:10px 0;box-shadow:0 16px 40px #0005}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:10px 0}.stat{background:#0c1420;border:1px solid var(--line);border-radius:12px;padding:8px}.stat small{display:block;color:var(--muted)}.stat b{font-size:14px}
+.story{font-size:16px;line-height:1.75;white-space:pre-line}.choices{display:grid;gap:8px;margin-top:15px}.choices button{text-align:left}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 8px;margin:2px;font-size:12px;color:var(--muted)}
+.bar{height:8px;background:#253247;border-radius:20px;overflow:hidden}.fill{height:100%;background:var(--a)}.log{max-height:180px;overflow:auto;color:var(--muted);font-size:13px}
+.good{color:var(--good)}.bad{color:var(--bad)}.gold{color:var(--gold)}h1,h2,h3{margin-top:0}
+input,select{background:#0b1320;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%}
+@media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.wrap{padding:8px}}
+</style>
+</head>
+<body><main id="app" class="wrap"></main>
+<script>
+const app=document.getElementById("app");
+const FAMILIES=[
+{id:"warden",name:"Maison Warden",chance:24,bonus:"+2 endurance, +1 courage",malus:"Les anciens exigent discipline et loyauté."},
+{id:"vale",name:"Maison Vale",chance:21,bonus:"+2 agilité, +1 observation",malus:"Une réputation modeste dans les quartiers riches."},
+{id:"forge",name:"Maison Forge",chance:18,bonus:"+2 force, +1 artisanat",malus:"Moins à l'aise dans les intrigues."},
+{id:"meridian",name:"Maison Meridian",chance:14,bonus:"+2 intelligence, +1 réputation",malus:"Les rumeurs familiales attirent l'attention."},
+{id:"nightfall",name:"Maison Nightfall",chance:9,bonus:"+2 discrétion, +1 agilité",malus:"Relations initiales plus difficiles."},
+{id:"aurel",name:"Maison Aurel",chance:6,bonus:"+2 réputation, +1 intelligence",malus:"Des dettes anciennes compliquent certains choix."},
+{id:"storm",name:"Maison Storm",chance:5,bonus:"+3 courage",malus:"Impulsivité dans certaines négociations."},
+{id:"ashen",name:"Lignée Ashen",chance:3,bonus:"+2 intelligence, +2 endurance",malus:"Un héritage latent provoque parfois des événements imprévisibles."}
+];
+const TITANS=[
+{id:"none",name:"Aucun Titan au départ",desc:"Ton potentiel reste inconnu."},
+{id:"bastion",name:"Titan Bastion",desc:"Forme défensive et très résistante."},
+{id:"raptor",name:"Titan Raptor",desc:"Forme rapide spécialisée dans les mouvements offensifs."},
+{id:"oracle",name:"Titan Oracle",desc:"Forme rare orientée perception et analyse."},
+{id:"colossus",name:"Titan Colosse",desc:"Forme gigantesque, puissante mais difficile à maîtriser."}
+];
+const NAMES=["Mara","Noam","Kael","Iris","Soren","Lio","Vera"];
+let G=null;
+const fresh=()=>({created:false,name:"",age:16,family:null,titan:"none",titanControl:0,hp:100,maxhp:100,st:100,maxst:100,force:5,agility:5,intel:5,courage:5,obs:5,rep:0,money:40,day:1,location:"Port-Aube",scene:"intro",level:1,xp:0,log:[],relations:{Mara:0,Noam:0,Kael:0},flags:{},inventory:["Trousse de terrain"]});
+function esc(x){return String(x??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function save(){localStorage.setItem("vanguard_save",JSON.stringify(G))}
+function load(){try{const x=JSON.parse(localStorage.getItem("vanguard_save"));if(x){G=x;render();return true}}catch(e){}return false}
+function log(t){G.log.unshift(t);G.log=G.log.slice(0,50)}
+function family(){return FAMILIES.find(x=>x.id===G.family)||FAMILIES[0]}
+function titan(){return TITANS.find(x=>x.id===G.titan)||TITANS[0]}
+function advance(){G.day++;G.st=Math.min(G.maxst,G.st+28);G.hp=Math.min(G.maxhp,G.hp+7)}
+function xp(n){G.xp+=n;while(G.xp>=G.level*90){G.xp-=G.level*90;G.level++;G.maxhp+=6;G.maxst+=6;G.hp=G.maxhp;G.st=G.maxst;log("Niveau "+G.level+" atteint.")}}
+function familyRoll(){let total=FAMILIES.reduce((a,x)=>a+x.chance,0),r=Math.random()*total;for(const f of FAMILIES){r-=f.chance;if(r<=0)return f}return FAMILIES[0]}
+function applyFamily(f){
+ G.family=f.id;
+ const b={warden:[["maxst",20],["st",20],["courage",2]],vale:[["agility",2],["obs",1]],forge:[["force",2]],meridian:[["intel",2],["rep",1]],nightfall:[["agility",2]],aurel:[["rep",2],["intel",1]],storm:[["courage",3]],ashen:[["intel",2],["maxst",15],["st",15]]};
+ (b[f.id]||[]).forEach(([k,v])=>{G[k]=(G[k]||0)+v})
+}
+function startTitan(){
+ if(Math.random()>0.08)return "none";
+ return ["bastion","raptor","oracle","colossus"][Math.floor(Math.random()*4)]
+}
+function awaken(id){
+ if(G.titan!=="none")return;
+ G.titan=id;G.titanControl=15;
+ if(id==="bastion"){G.maxhp+=25;G.hp=G.maxhp;G.maxst+=10;G.st=G.maxst}
+ if(id==="raptor"){G.agility+=4;G.force+=2}
+ if(id==="oracle"){G.intel+=4;G.obs+=2}
+ if(id==="colossus"){G.maxhp+=35;G.hp=G.maxhp;G.force+=4;G.maxst-=12;G.st=Math.max(0,G.st)}
+ log("Éveil : "+titan().name)
+}
+function create(){
+ const n=document.getElementById("name").value.trim();if(!n)return alert("Choisis un nom.");
+ G=fresh();G.created=true;G.name=n;G.age=+document.getElementById("age").value||16;
+ const f=familyRoll();applyFamily(f);const t=startTitan();if(t!=="none")awaken(t);
+ log("Ton histoire commence à Port-Aube.");save();render()
+}
+function roll(stat,dc){return Math.floor(Math.random()*6)+1+G[stat]>=dc}
+const S={
+intro:{title:"Le matin du signal",text:`Port-Aube se réveille sous un ciel gris. Les marchands installent leurs étals, les apprentis courent vers les ateliers et les gardes changent de poste.
+
+Tu connais chaque rue de ce quartier. Pourtant, aujourd'hui, une impression étrange te suit depuis ton réveil.
+
+Trois coups de cloche retentissent.
+
+Les conversations cessent.
+
+Sur le Rempart d'Azur, plusieurs soldats regardent au loin. Personne ne sait encore que cette journée deviendra le point de départ d'une histoire qui dépassera largement les murs de la ville.`,c:[
+["Monter vers le rempart",()=>{G.obs+=2;scene("wall")}],
+["Aller au marché écouter les rumeurs",()=>{G.relations.Noam++;scene("market")}],
+["Rejoindre la caserne",()=>{G.courage++;scene("barracks")}] ]},
+wall:{title:"Le Rempart d'Azur",text:`Tu atteins une plateforme d'observation.
+
+Un officier donne des ordres rapides. Au-delà des collines, une poussière inhabituelle se lève.
+
+Un soldat te demande de redescendre. Tu pourrais obéir, mais ton regard accroche un symbole gravé sur une vieille pierre du rempart : un cercle traversé par trois traits.
+
+Ce symbole ressemble à celui que portait un pendentif transmis dans ta famille.`,c:[
+["Mémoriser le symbole",()=>{G.obs+=2;G.flags.symbol=true;scene("market")}],
+["Aider l'officier",()=>{G.rep++;G.flags.help=true;scene("barracks")}],
+["Retourner discrètement chez toi",()=>{G.flags.home=true;scene("home")}]]},
+market:{title:"Le Marché Bas",text:`Les rumeurs se propagent.
+
+Noam, un jeune coursier, affirme qu'une patrouille n'est pas revenue. Une autre personne prétend que les portes extérieures ont reçu un ordre inhabituel.
+
+Personne n'a les mêmes informations.
+
+Tu comprends que la peur remplit très vite les vides laissés par la vérité.`,c:[
+["Accompagner Noam",()=>{G.relations.Noam+=2;G.agility++;scene("barracks")}],
+["Chercher un registre officiel",()=>{G.intel++;scene("archive")}],
+["Rester avec les civils",()=>{G.rep++;scene("signal")}]]},
+barracks:{title:"La caserne",text:`La caserne est en mouvement.
+
+Les capitaines répartissent les unités. Des caisses sont chargées. Les recrues reçoivent des instructions contradictoires.
+
+Mara te reconnaît parmi la foule.
+
+« Si quelque chose arrive, ne reste pas seul », dit-elle.
+
+Puis un signal rouge traverse le ciel.`,c:[
+["Aider à organiser l'évacuation",()=>{G.courage++;G.rep++;scene("evac")}],
+["Demander une affectation militaire",()=>{G.rep++;G.flags.military=true;scene("evac")}],
+["Chercher l'origine du signal",()=>{G.obs++;scene("signal")}]]},
+home:{title:"La maison familiale",text:`Chez toi, le pendentif familial semble plus lourd que d'habitude.
+
+Une vieille boîte contient un carnet sans titre. Une phrase revient plusieurs fois : « Ne réveille jamais ce qui dort sous la pierre. »
+
+Tu n'as aucune explication.
+
+Au même moment, une secousse fait trembler les vitres.`,c:[
+["Lire le carnet",()=>{G.intel+=2;G.flags.book=true;scene("signal")}],
+["Cacher le carnet",()=>{G.flags.bookHidden=true;scene("signal")}],
+["Partir rejoindre les autres",()=>{G.courage++;scene("signal")}]]},
+archive:{title:"Les archives municipales",text:`Les archives indiquent que le symbole n'est apparu dans les documents publics qu'une seule fois.
+
+Une expédition ancienne avait trouvé une structure souterraine.
+
+Le rapport officiel conclut à un effondrement.
+
+Une note manuscrite, elle, dit simplement : « Aucun effondrement. Scellé volontairement. »`,c:[
+["Copier la note",()=>{G.flags.note=true;G.obs++;scene("signal")}],
+["Chercher le dossier complet",()=>{G.intel+=2;G.flags.archive=true;scene("signal")}],
+["Quitter avant d'être vu",()=>{G.agility++;scene("signal")}]]},
+signal:{title:"Le signal rouge",text:`La ville bascule dans le chaos.
+
+Les portes intérieures se ferment. Les familles cherchent un passage. Les soldats courent vers les remparts.
+
+Tu ne sais pas encore exactement ce qui arrive, mais tu sais que rester immobile est aussi une décision.
+
+Au loin, une masse gigantesque se dessine derrière les collines.
+
+Les premières sirènes retentissent.`,c:[
+["Protéger les civils",()=>{G.rep+=2;G.courage++;scene("fall")}],
+["Suivre une unité militaire",()=>{G.flags.military=true;scene("fall")}],
+["Chercher Mara et Noam",()=>{G.relations.Mara++;G.relations.Noam++;scene("fall")}]]},
+fall:{title:"La chute",text:`Une partie du rempart extérieur cède.
+
+La ville devient méconnaissable en quelques minutes. Les rues se remplissent de poussière et de cris. Tu évites les zones dangereuses et aides un petit groupe à rejoindre les portes intérieures.
+
+Tu ne peux pas sauver tout le monde.
+
+Mais tu peux décider de ne pas détourner le regard.`,c:[
+["Rester avec les familles",()=>{G.rep+=2;G.flags.people=true;scene("refuge")}],
+["Rejoindre les soldats",()=>{G.courage+=2;G.flags.soldier=true;scene("refuge")}],
+["Chercher le symbole sous le rempart",()=>{G.intel++;G.flags.underwall=true;scene("refuge")}]]},
+refuge:{title:"Le refuge",text:`La nuit est longue.
+
+Au refuge, tu retrouves Mara et Noam. Kael, lui, n'a pas donné de nouvelles.
+
+Personne ne sait ce qui se passe au-delà des murs.
+
+Une nouvelle vie commence pour toi : reconstruction, entraînement, enquêtes et choix de carrière.`,c:[
+["T'inscrire à l'Académie Vanguard",()=>{G.flags.academy=true;scene("academy")}],
+["Travailler dans les équipes civiles",()=>{G.flags.civil=true;scene("civil")}],
+["Chercher seul la vérité sur le symbole",()=>{G.flags.investigator=true;scene("academy")}]]},
+academy:{title:"L'Académie Vanguard",text:`Les mois passent.
+
+Tu apprends à te déplacer rapidement, à lire une carte, à protéger une équipe et à prendre une décision quand personne ne possède toutes les informations.
+
+Mara devient une camarade proche. Kael revient finalement, plus froid qu'avant.
+
+Les instructeurs répètent une phrase : « Une bonne recrue n'est pas celle qui ne tombe jamais. C'est celle qui comprend pourquoi elle est tombée. »`,c:[
+["Te spécialiser en mobilité",()=>{G.agility+=2;scene("exam")}],
+["Étudier stratégie et archives",()=>{G.intel+=2;scene("exam")}],
+["Devenir spécialiste du combat",()=>{G.force+=2;scene("exam")}]]},
+civil:{title:"La reconstruction",text:`Tu travailles à reconstruire les quartiers détruits.
+
+Ce choix semble loin des combats, mais tu découvres des incohérences dans les plans de reconstruction.
+
+Certaines fondations ont été volontairement laissées intactes.
+
+Quelqu'un protège encore le secret sous la ville.`,c:[
+["Enquêter discrètement",()=>{G.obs+=2;scene("exam")}],
+["Prévenir la mairie",()=>{G.rep++;scene("exam")}],
+["Suivre les plans interdits",()=>{G.intel++;G.flags.under=true;scene("secret")}]]},
+secret:{title:"Sous les fondations",text:`Une galerie ancienne s'enfonce sous la ville.
+
+Sur les murs : le symbole familial.
+
+Au fond : une porte scellée.
+
+Tu entends quelque chose derrière, comme un battement régulier.
+
+Tu n'ouvres pas la porte.
+
+Pas encore.`,c:[
+["Marquer l'endroit",()=>{G.obs++;scene("exam")}],
+["Entrer malgré le risque",()=>{G.courage+=2;G.flags.door=true;scene("exam")}],
+["Prévenir ton équipe",()=>{G.rep++;scene("exam")}]]},
+exam:{title:"Le choix de ta voie",text:`Ton examen final arrive.
+
+Trois unités recrutent : exploration, garde et renseignement.
+
+Aucune voie ne te donnera la même histoire.
+
+Ton choix déterminera tes missions, tes alliés et les secrets auxquels tu auras accès.`,c:[
+["Exploration",()=>{G.flags.unit="Exploration";G.agility++;scene("mission1")}],
+["Garde du Rempart",()=>{G.flags.unit="Garde";G.maxhp+=12;G.hp=G.maxhp;scene("mission1")}],
+["Renseignement",()=>{G.flags.unit="Renseignement";G.intel++;G.obs++;scene("mission1")}]]},
+mission1:{title:"Première vraie mission",text:`Ta première mission paraît simple : escorter un convoi.
+
+Puis une route secondaire disparaît de la carte.
+
+Le convoi est attaqué par des inconnus qui ne cherchent pas les marchandises. Ils cherchent une seule caisse portant le symbole ancien.`,c:[
+["Défendre la caisse",()=>{let ok=roll("courage",10);G.hp-=ok?12:30;G.rep+=ok?2:0;xp(40);scene("awakening")}],
+["Laisser la caisse et sauver le convoi",()=>{G.rep++;xp(35);scene("awakening")}],
+["Examiner le symbole",()=>{G.intel+=2;G.flags.box=true;xp(35);scene("awakening")}]]},
+awakening:{title:"Ce qui dort en toi",text:`Après la mission, ton corps réagit au symbole.
+
+Une chaleur traverse tes bras.
+
+Tu as maintenant un choix.
+
+Si tu n'as pas encore de Titan, ton potentiel peut s'éveiller ici. Mais tu peux aussi refuser et chercher une autre voie.
+
+Le pouvoir n'est pas une récompense gratuite : il exige du contrôle et change la façon dont les autres te voient.`,c:[
+["Accepter l'éveil",()=>{if(G.titan==="none")awaken(["bastion","raptor","oracle","colossus"][Math.floor(Math.random()*4)]);scene("campaign")}],
+["Refuser pour le moment",()=>{G.intel++;scene("campaign")}],
+["Garder le secret",()=>{G.flags.titanSecret=true;scene("campaign")}]]},
+campaign:{title:"La campagne commence",text:`Les années suivantes forment le cœur de ta vie de Vanguard.
+
+Reconnaissances, escortes, enquêtes, missions de sauvetage, rivalités entre unités, entraînements et découvertes s'enchaînent.
+
+Ton nom commence à circuler.
+
+Ton Titan, si tu en as un, progresse avec ton contrôle. Sans Titan, tes compétences peuvent te mener tout aussi loin.
+
+Mais une question revient toujours : pourquoi ta famille est-elle liée au symbole ?`,c:[
+["Partir en expédition extérieure",()=>{advance();xp(60);scene("outer")}],
+["Chercher la vérité familiale",()=>{G.intel+=2;scene("familySecret")}],
+["Construire ton influence dans la ville",()=>{G.rep+=3;scene("politics")}]]},
+familySecret:{title:"L'héritage",text:`Tu réunis plusieurs fragments d'archives.
+
+Ta famille n'a pas créé les Titans.
+
+Elle a gardé quelque chose.
+
+Une méthode de contrôle.
+
+Un secret ancien.
+
+Et une promesse : ne jamais laisser ce pouvoir tomber entre les mains de quelqu'un qui chercherait à dominer les autres.`,c:[
+["Accepter cette responsabilité",()=>{G.courage+=2;G.flags.heir=true;scene("outer")}],
+["Briser la tradition",()=>{G.rep+=2;G.flags.breaker=true;scene("outer")}],
+["Chercher la preuve absolue",()=>{G.intel+=3;scene("outer")}]]},
+politics:{title:"Les salles du pouvoir",text:`Tes missions t'ont donné une réputation.
+
+Des responsables veulent maintenant utiliser ton nom.
+
+Certains veulent ton aide.
+
+D'autres veulent contrôler ton potentiel.
+
+Tu découvres qu'une guerre peut commencer bien avant le premier combat.`,c:[
+["Protéger ton équipe",()=>{G.relations.Mara+=2;G.rep+=2;scene("outer")}],
+["Négocier avec les responsables",()=>{G.intel++;G.rep+=2;scene("outer")}],
+["Refuser toute alliance",()=>{G.courage++;scene("outer")}]]},
+outer:{title:"Le monde extérieur",text:`Une nouvelle expédition est organisée.
+
+Cette fois, les cartes sont incomplètes.
+
+Tu franchis la frontière avec ton unité.
+
+Le paysage extérieur est vaste, silencieux et inconnu.
+
+Puis vous trouvez une ville abandonnée dont les murs portent exactement le même symbole que ta famille.`,c:[
+["Explorer la ville",()=>{G.obs+=2;xp(70);scene("city")}],
+["Sécuriser le groupe",()=>{G.rep+=2;G.courage++;xp(70);scene("city")}],
+["Chercher une salle souterraine",()=>{G.intel+=2;G.flags.citySecret=true;xp(70);scene("city")}]]},
+city:{title:"La cité sans nom",text:`Dans les ruines, tu trouves des cartes montrant des terres très éloignées.
+
+Une civilisation inconnue est mentionnée.
+
+Le monde est plus grand que ce que les remparts ont laissé croire.
+
+Ton histoire ne concerne plus seulement Port-Aube.`,c:[
+["Ramener les cartes",()=>{G.rep+=3;scene("war")}],
+["Garder les cartes",()=>{G.flags.maps=true;G.intel+=2;scene("war")}],
+["Chercher l'origine de la cité",()=>{G.obs+=2;scene("war")}]]},
+war:{title:"Les frontières",text:`Les informations rapportées changent les relations entre les régions.
+
+Ton unité doit désormais choisir entre diplomatie, défense et exploration.
+
+Des années de missions ont transformé tes compagnons.
+
+Mara est devenue cheffe d'équipe. Noam dirige les communications. Kael, lui, garde encore un secret.`,c:[
+["Faire confiance à ton équipe",()=>{G.relations.Mara+=2;G.relations.Noam+=2;scene("betrayal")}],
+["Surveiller Kael",()=>{G.obs+=2;G.flags.watch=true;scene("betrayal")}],
+["Partir seul en reconnaissance",()=>{G.agility+=2;scene("betrayal")}]]},
+betrayal:{title:"La vérité de Kael",text:`Kael avoue avoir reçu des ordres secrets.
+
+Il ne voulait pas trahir l'équipe.
+
+Il croyait protéger quelqu'un.
+
+Mais ses actions ont permis à un groupe ennemi de retrouver le symbole.
+
+La confiance est désormais brisée.`,c:[
+["Lui donner une seconde chance",()=>{G.relations.Kael+=3;G.flags.forgive=true;scene("citadel")}],
+["Le faire arrêter",()=>{G.rep+=2;scene("citadel")}],
+["Chercher qui lui donnait les ordres",()=>{G.intel+=2;scene("citadel")}]]},
+citadel:{title:"La Citadelle",text:`Une ancienne citadelle devient le centre de votre enquête.
+
+Sous ses fondations se trouve une salle où sont conservées des archives sur les Titans.
+
+Ton Titan réagit fortement si tu en possèdes un.
+
+Les documents indiquent que plusieurs pouvoirs existent, mais aucun n'est exactement identique au tien.`,c:[
+["Étudier les archives",()=>{G.intel+=3;scene("last")}],
+["Détruire les archives",()=>{G.rep+=2;scene("last")}],
+["Les confier à ton unité",()=>{G.rep+=3;scene("last")}]]},
+last:{title:"Le dernier choix",text:`Des années ont passé.
+
+Tu as changé.
+
+Tu peux être devenu un combattant, un stratège, un enquêteur, un chef ou quelqu'un qui a choisi une vie loin des armes.
+
+Ton Titan, si tu en as un, est désormais lié à ton identité. Ton absence de Titan, si tu n'en as jamais eu, est aussi devenue une force : tu as construit ton histoire autrement.
+
+Devant toi se trouve une dernière porte.
+
+Derrière elle : une région que personne de ton peuple n'a encore explorée.`,c:[
+["Franchir la porte avec ton équipe",()=>{scene("ending1")}],
+["Partir seul",()=>{scene("ending2")}],
+["Rester et reconstruire",()=>{scene("ending3")}]]},
+ending1:{title:"La route continue",text:`Tu franchis la porte.
+
+Derrière les remparts, le monde n'a pas de fin visible.
+
+Ton équipe avance avec toi.
+
+VANGUARD n'est pas l'histoire d'une personne choisie par le destin. C'est l'histoire de quelqu'un qui a fait assez de choix pour devenir capable de changer son propre destin.
+
+Ta prochaine aventure commence ici.`,c:[
+["Passer en mode libre",()=>{G.flags.free=true;scene("free")}]]},
+ending2:{title:"Le chemin solitaire",text:`Tu pars avant l'aube.
+
+Tu n'emportes qu'une carte, quelques provisions et le symbole familial.
+
+Que tu sois Titan ou non, une chose est certaine : personne n'écrira la suite à ta place.`,c:[
+["Passer en mode libre",()=>{G.flags.free=true;scene("free")}]]},
+ending3:{title:"Le gardien du rempart",text:`Tu restes.
+
+Tu aides à reconstruire Port-Aube et formes une nouvelle génération de Vanguard.
+
+Ton histoire devient une légende locale, mais ta porte reste ouverte à de nouvelles missions.`,c:[
+["Passer en mode libre",()=>{G.flags.free=true;scene("free")}]]},
+free:{title:"Mode libre",text:`La campagne principale est terminée.
+
+Tu peux maintenant vivre des événements aléatoires, gagner de l'expérience, explorer les régions et continuer à développer ton personnage.`,c:[
+["Mission aléatoire",()=>mission()],
+["Entraînement",()=>{G.force++;G.agility++;G.st=Math.max(0,G.st-15);xp(25);log("Entraînement terminé.");render()}],
+["Explorer",()=>{const loc=["Port-Aube","Quartier des Forges","Caserne Nord","Rempart d'Azur","Marché Bas","Bois des Brumes","Citadelle Haute"];G.location=loc[Math.floor(Math.random()*loc.length)];xp(20);log("Exploration : "+G.location);render()}]]}
+};
+function scene(id){G.scene=id;save();render()}
+function mission(){const m=[["Escorter un convoi",()=>{G.rep++;G.money+=18;xp(35)}],["Retrouver un éclaireur",()=>{G.obs++;xp(45)}],["Enquêter sur un symbole",()=>{G.intel++;xp(50)}],["Protéger un quartier",()=>{G.courage++;G.rep+=2;xp(45)}]][Math.floor(Math.random()*4)];m[1]();advance();log("Mission : "+m[0]);save();render()}
+function storyChoice(i){const s=S[G.scene]||S.intro;if(s.c[i]){s.c[i][1]();advance();save();render()}}
+function creation(){
+ app.innerHTML=`<div class="card"><div class="brand">VANGUARD</div><div class="sub">LES HÉRITIERS DU REMPART — UNIVERS ORIGINAL</div>
+ <h1>Commence ton histoire</h1><p>Ton personnage est créé une seule fois. La famille est tirée au sort. Une petite chance existe d'obtenir un Titan dès le départ ; sinon certains événements peuvent provoquer un éveil plus tard.</p>
+ <label>Nom</label><input id="name" maxlength="22" placeholder="Ton nom"><br><br>
+ <label>Âge</label><select id="age"><option>15</option><option selected>16</option><option>17</option><option>18</option></select>
+ <div class="card"><b>🎲 Famille</b><p>Les lignées les plus puissantes ont des probabilités augmentées, mais aucune n'est garantie.</p></div>
+ <div class="card"><b>🐉 Titan</b><p>Le Titan est optionnel. Tu peux l'obtenir au début ou au cours de la campagne.</p></div>
+ <button class="primary" onclick="create()">Commencer</button> <button onclick="load()">Charger une sauvegarde</button></div>`;
+}
+function render(){
+ if(!G||!G.created){creation();return}
+ const s=S[G.scene]||S.intro,f=family(),t=titan();
+ app.innerHTML=`<div class="top"><div><div class="brand">VANGUARD</div><div class="sub">Les Héritiers du Rempart</div></div>
+ <div><button onclick="save();alert('Sauvegarde effectuée')">💾 Sauver</button><button onclick="mission()">⚔️ Mission</button></div></div>
+ <div class="stats">
+ <div class="stat"><small>Personnage</small><b>${esc(G.name)}</b></div><div class="stat"><small>Famille</small><b>${esc(f.name)}</b></div><div class="stat"><small>Titan</small><b>${esc(t.name)}</b></div><div class="stat"><small>Jour</small><b>${G.day}</b></div><div class="stat"><small>Niveau</small><b>${G.level}</b></div></div>
+ <div class="card"><span class="tag">📍 ${esc(G.location)}</span><span class="tag">🏅 Réputation ${G.rep}</span><span class="tag gold">💰 ${G.money}</span>
+ <h1>${esc(s.title)}</h1><div class="story">${esc(s.text)}</div><div class="choices">${s.c.map((c,i)=>`<button onclick="storyChoice(${i})">${i+1}. ${esc(c[0])}</button>`).join("")}</div></div>
+ <div class="grid"><div class="card"><h3>📊 Capacités</h3>
+ <p>❤️ ${G.hp}/${G.maxhp}<div class="bar"><div class="fill" style="width:${Math.max(0,G.hp/G.maxhp*100)}%"></div></div></p>
+ <p>⚡ ${G.st}/${G.maxst}<div class="bar"><div class="fill" style="width:${Math.max(0,G.st/G.maxst*100)}%"></div></div></p>
+ <span class="tag">Force ${G.force}</span><span class="tag">Agilité ${G.agility}</span><span class="tag">Intelligence ${G.intel}</span><span class="tag">Courage ${G.courage}</span><span class="tag">Observation ${G.obs}</span>
+ <p>XP : ${G.xp}/${G.level*90}</p></div>
+ <div class="card"><h3>🧬 Famille</h3><p>${esc(f.bonus)}</p><p class="sub">${esc(f.malus)}</p><h3>🐉 Titan</h3><p>${esc(t.desc)}</p><p>Contrôle : ${G.titan==="none"?"—":G.titanControl+"%"}</p><h3>👥 Relations</h3><p>Mara ${G.relations.Mara} · Noam ${G.relations.Noam} · Kael ${G.relations.Kael}</p></div></div>
+ <div class="card"><h3>📜 Journal</h3><div class="log">${G.log.map(x=>"• "+esc(x)).join("<br>")}</div></div>`;
+}
+render();
+</script></body></html>
